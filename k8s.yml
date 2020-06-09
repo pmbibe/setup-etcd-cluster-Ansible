@@ -1,0 +1,67 @@
+- name: Install etcd Cluster
+  hosts: etcd
+  tasks:
+  - name: "Install wget, git"
+    yum:
+      name: "{{ packages }}"
+    vars:
+      packages:
+      - wget 
+      - git
+  - name: "Copy file Install GO"
+    template: src=InstallGO.sh dest=/root/InstallGO.sh
+  - name: "Give execute for file Install"
+    file:
+      path: /root/InstallGO.sh
+      owner: root
+      group: root
+      mode: '0754'
+  - name: "Install GO"
+    shell: "./InstallGO.sh"
+- name: Init etcd Cluster - master
+  hosts: etcdmaster
+  tasks:
+  - name: "Init etcd Cluster"
+    shell: "cd etcdadm/ && ./etcdadm init"
+- name: Init etcd Cluster - Master
+  hosts: etcdmaster 
+  tasks:
+  - name: "Copy CA cert to slave via localhost"
+    synchronize:
+      mode: pull
+      src: "/etc/etcd/pki/ca.crt"
+      dest: "/"
+      rsync_opts:
+        - "--archive"
+        - "--relative"
+    delegate_to: "localhost"
+  - name: "Copy CA key to slave via localhost"
+    synchronize:
+      mode: pull
+      src: "/etc/etcd/pki/ca.key"
+      dest: "/"
+      rsync_opts:
+        - "--archive"
+        - "--relative"
+    delegate_to: "localhost"
+- name: Init etcd Cluster - slave
+  hosts: etcdslave 
+  tasks:
+  - name: "Copy CA key to slave "
+    synchronize:
+      src: "/etc/etcd/pki/ca.key"
+      dest: "/"
+      rsync_opts:
+        - "--archive"
+        - "--relative"
+    delegate_to: "localhost"
+  - name: "Copy CA key to slave"
+    synchronize:
+      src: "/etc/etcd/pki/ca.key"
+      dest: "/"
+      rsync_opts:
+        - "--archive"
+        - "--relative"
+    delegate_to: "localhost"
+  - name: "John etcd cluster"
+    shell: "cd etcdadm/ && ./etcdadm join https://{{ groups.etcdmaster }}:2379"
