@@ -47,9 +47,9 @@
 - name: Init etcd Cluster - slave
   hosts: etcdslave 
   tasks:
-  - name: "Copy CA key to slave "
+  - name: "Copy CA cert to slave "
     synchronize:
-      src: "/etc/etcd/pki/ca.key"
+      src: "/etc/etcd/pki/ca.crt"
       dest: "/"
       rsync_opts:
         - "--archive"
