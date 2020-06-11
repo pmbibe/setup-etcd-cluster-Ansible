@@ -21,6 +21,18 @@
 - name: Init etcd Cluster - master
   hosts: etcdmaster
   tasks:
+  - name: "Install HAProxy"
+    yum:
+      name: "{{ packages }}"
+    vars:
+      packages:
+      - haproxy
+  - name: "Config HAProxy"
+    template: src=haproxy.cfg dest=/etc/haproxy/haproxy.cfg
+  - name: Start service haproxy, if not started
+    service:
+      name: haproxy
+      state: started
   - name: "Init etcd Cluster"
     shell: "cd etcdadm/ && ./etcdadm init"
 - name: Init etcd Cluster - Master
@@ -47,17 +59,17 @@
 - name: Init etcd Cluster - slave
   hosts: etcdslave 
   tasks:
-  - name: "Copy CA cert to slave "
+  - name: "Copy CA key to slave "
     synchronize:
-      src: "/etc/etcd/pki/ca.crt"
+      src: "/etc/etcd/pki/ca.key"
       dest: "/"
       rsync_opts:
         - "--archive"
         - "--relative"
     delegate_to: "localhost"
-  - name: "Copy CA key to slave"
+  - name: "Copy CA cert to slave"
     synchronize:
-      src: "/etc/etcd/pki/ca.key"
+      src: "/etc/etcd/pki/ca.crt"
       dest: "/"
       rsync_opts:
         - "--archive"
