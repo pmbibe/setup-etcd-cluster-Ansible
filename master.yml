@@ -1,0 +1,148 @@
+- name: Config Master node
+  hosts: master
+  tasks:
+  - name: "Disable swap"
+    shell: "swapoff -a && sed -i '/ swap / s/^/#/' /etc/fstab"  
+  - name: "Create folder /etc/kubernetes/pki/etcd/"
+    file:
+      path: /etc/kubernetes/pki/etcd/
+      state: directory
+      mode: "0755"
+- name: Config Master node
+  hosts: master
+  tasks:
+  - name: "Install rsync"
+    yum:
+      name: "{{ packages }}"
+    vars:
+      packages:
+      - rsync
+  - name: "Copy file requirement"
+    template: src=InstallDockerC7.sh dest=/root/InstallDockerC7.sh
+  - name: "Give execute for file requirement"
+    file:
+      path: /root/InstallDockerC7.sh
+      owner: root
+      group: root
+      mode: '0754'
+  - name: "Install requirement"
+    shell: "./InstallDockerC7.sh"
+- name: Config Master node
+  hosts: etcdmaster
+  tasks:
+  - name: "Copy apiserver-client cert to master via localhost"
+    synchronize:
+      mode: pull
+      src: "/etc/etcd/pki/apiserver-etcd-client.crt"
+      dest: "/"
+      rsync_opts:
+        - "--archive"
+        - "--relative"
+    delegate_to: "localhost"
+  - name: "Copy apiserver-client key to master via localhost"
+    synchronize:
+      mode: pull
+      src: "/etc/etcd/pki/apiserver-etcd-client.key"
+      dest: "/"
+      rsync_opts:
+        - "--archive"
+        - "--relative"
+    delegate_to: "localhost"
+- name: Config Master node
+  hosts: masterfirst
+  tasks:
+  - name: "Copy apiserver-client cert to master"
+    synchronize:
+      src: "/etc/etcd/pki/apiserver-etcd-client.crt"
+      dest: "/etc/kubernetes/pki/"
+    delegate_to: "localhost"
+  - name: "Copy apiserver-client key to master"
+    synchronize:
+      src: "/etc/etcd/pki/apiserver-etcd-client.key"
+      dest: "/etc/kubernetes/pki/"
+    delegate_to: "localhost"
+  - name: "Copy ca cert to master"
+    synchronize:
+      src: "/etc/etcd/pki/ca.crt"
+      dest: "/etc/kubernetes/pki/etcd/"
+    delegate_to: "localhost"
+- name: Config Master node
+  hosts: masterfirst
+  tasks:
+  - name: "Change some config"
+    shell: "echo 1 >> /proc/sys/net/bridge/bridge-nf-call-iptables"
+  - name: "Copy file kubeadm.yaml"
+    template: src=kubeadm.yaml dest=/root/kubeadm.yaml
+  - name: "Init k8s"
+    shell: "kubeadm init --config kubeadm.yaml --upload-certs"
+  - name: "Config after init cluster step 1"
+    file:
+      path: $HOME/.kube
+      state: directory
+  - name: "Config after init cluster step 2"
+    copy:
+      remote_src: yes
+      src: /etc/kubernetes/admin.conf
+      dest: $HOME/.kube/config
+  - name: "Create network for Cluster"
+    shell: "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml"
+- name: "Config another master"
+  hosts: masterfirst
+  tasks:
+    - name: "Copy all cert to other master via localhost"
+      synchronize:
+        mode: pull
+        src: "/etc/kubernetes/pki "
+        dest: "/root"
+      delegate_to: "localhost"
+- name: "Config another master 1"
+  hosts: othermaster
+  tasks:
+    - name: "Copy all cert to other master via localhost"
+      synchronize:
+        dest: "/etc/kubernetes/"
+        src: "/root/pki"
+        rsync_opts:
+          - "--remove-source-files"
+      delegate_to: "localhost"
+    - name: Ansible delete file apiserver.key
+      file:
+        path: /etc/kubernetes/pki/apiserver.key
+        state: absent
+    - name: Ansible delete file apiserver.crt
+      file:
+        path: /etc/kubernetes/pki/apiserver.crt
+        state: absent
+- name: "Config another master"
+  hosts: masterfirst
+  tasks:
+  - name: "Copy file requirement"
+    template: src=johnothermaster.sh dest=/root/johnothermaster.sh
+  - name: "Get token"
+    shell: "kubeadm token create --print-join-command >> token.txt && sed 's/$/ --control-plane/' token.txt >> johnothermaster.sh"
+  - name: "Copy all cert to other master via localhost"
+    synchronize:
+      mode: pull
+      src: "/root/johnothermaster.sh "
+      dest: "/root"
+      rsync_opts:
+          - "--remove-source-files"
+    delegate_to: "localhost"
+- name: "Config another master 1"
+  hosts: othermaster
+  tasks:
+    - name: "Copy all "
+      synchronize:
+        src: "/root/johnothermaster.sh"
+        dest: "/root"
+        rsync_opts:
+          - "--remove-source-files"
+      delegate_to: "localhost"
+    - name: "Give execute for file requirement"
+      file:
+        path: /root/johnothermaster.sh
+        owner: root
+        group: root
+        mode: '0754'
+    - name: "Join Cluster"
+      shell: "./johnothermaster.sh"
