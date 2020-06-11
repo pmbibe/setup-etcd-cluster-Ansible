@@ -1,0 +1,3 @@
+VIPMasterNode: 192.168.141.230
+Portetcd: 2379
+PortAPI: 6443
